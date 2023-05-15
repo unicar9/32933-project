@@ -18,10 +18,13 @@ const scrapeJobs = async () => {
   const jobTypes = [
     { name: 'Frontend Developer', query: 'frontend+developer' },
     { name: 'Backend Developer', query: 'backend+developer' },
+    { name: 'Full Stack Developer', query: 'full+stack+developer' },
     { name: 'Software Engineer', query: 'software+engineer' },
     { name: 'DevOps', query: 'devops' },
-    { name: 'Product Manager', query: 'product+manager' },
+    { name: 'Data Engineer', query: 'data+engineer' },
     { name: 'UI/UX Designer', query: 'ui+ux+designer' },
+    { name: 'QA Engineer', query: 'qa+engineer' },
+    { name: 'Data Analyst', query: 'data+analyst' },
   ];
 
   const jobs = [];
@@ -66,6 +69,7 @@ const scrapeJobs = async () => {
             const link = `${site.baseUrl}${$(element).find('a').attr('href')}`;
 
             jobs.push({
+              jobType: jobType.name,
               site: site.name,
               title,
               company,
@@ -99,6 +103,7 @@ const scrapeJobs = async () => {
             const link = $(element).find('a').attr('href');
 
             jobs.push({
+              jobType: jobType.name,
               site: site.name,
               title,
               company,
@@ -121,6 +126,7 @@ const scrapeJobs = async () => {
             const link = `${site.baseUrl}${$(element).find('a').attr('href')}`;
 
             jobs.push({
+              jobType: jobType.name,
               site: site.name,
               title,
               company,
@@ -133,11 +139,19 @@ const scrapeJobs = async () => {
     }
   }
 
-  fs.writeFile('jobs.json', JSON.stringify(jobs), (err) => {
-    if (err) throw err;
-    console.log(`${jobs.length} Jobs data has been written to jobs.json`);
-    return;
-  });
+  fs.writeFile(
+    `jobs-${new Date().toISOString().substring(0, 10)}.json`,
+    JSON.stringify(jobs),
+    (err) => {
+      if (err) throw err;
+      console.log(
+        `${jobs.length} Jobs data has been written to jobs-${new Date()
+          .toISOString()
+          .substring(0, 10)}.json`
+      );
+      return;
+    }
+  );
 
   await browser.close();
   console.timeEnd('scrapeJobs');

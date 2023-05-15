@@ -1,23 +1,24 @@
 const natural = require('natural');
 const TfIdf = natural.TfIdf;
 const fs = require('fs');
-const stringSimilarity = require('string-similarity');
 
-const jobsData = fs.readFileSync('../jobsWithDetails.json', 'utf8');
+const jobsData = fs.readFileSync('jobsWithDetails.json', 'utf8');
 const jobs = JSON.parse(jobsData);
 
 const users = require('./mockUsers');
+const JaroWinklerDistance = natural.JaroWinklerDistance;
 
-// Function to filter jobs based on title similarity
-function filterJobsByTitle(user, jobs, titleSimilarityThreshold = 0.5) {
-  return jobs.filter((job) => {
-    const similarity = stringSimilarity.compareTwoStrings(
-      user.title,
-      job.title
-    );
-    return similarity >= titleSimilarityThreshold;
-  });
-}
+const tokenizer = new natural.WordTokenizer();
+const stopwords = new Set(natural.stopwords);
+
+const processTextForTfidf = (text) => {
+  const tokens = tokenizer
+    .tokenize(text.toLowerCase())
+    .filter((word) => !stopwords.has(word))
+    .map((word) => natural.PorterStemmer.stem(word));
+
+  return tokens;
+};
 
 function createAbbreviations(locationPart) {
   const words = locationPart.split(' ');
@@ -47,15 +48,6 @@ function compareLocation(userLocation, jobLocation) {
   return false;
 }
 
-// Function to tokenize and stem a given text
-// which is description from the user profile and the job
-function processText(text) {
-  const tokenizer = new natural.WordTokenizer();
-  const tokens = tokenizer.tokenize(text);
-  const stemmer = natural.PorterStemmer;
-  return tokens.map((token) => stemmer.stem(token.toLowerCase()));
-}
-
 // Function to calculate cosine similarity between two vectors
 function cosineSimilarity(vecA, vecB) {
   const dotProduct = vecA.reduce(
@@ -68,6 +60,11 @@ function cosineSimilarity(vecA, vecB) {
   const magnitudeB = Math.sqrt(
     vecB.reduce((acc, value) => acc + value * value, 0)
   );
+
+  if (magnitudeA === 0 || magnitudeB === 0) {
+    return 0;
+  }
+
   return dotProduct / (magnitudeA * magnitudeB);
 }
 
@@ -81,23 +78,27 @@ function extractTfidfVector(tfidf, documentIndex) {
   return vector;
 }
 
-// Function to calculate job scores based on user profile
-function calculateJobScores(userProfile, jobs) {
+const calculateJobScores = (userProfile, jobs) => {
+  const userDescriptionProcessed = processTextForTfidf(userProfile.description);
+  const jobDescriptionsProcessed = jobs.map((job) =>
+    processTextForTfidf(job.description)
+  );
+
+  const allDocuments = [userDescriptionProcessed].concat(
+    jobDescriptionsProcessed
+  );
+
   const tfidf = new TfIdf();
 
-  // Add user description to the tfidf object
-  tfidf.addDocument(processText(userProfile.description));
-
-  // Add job descriptions to the tfidf object
-  jobs.forEach((job) => {
-    tfidf.addDocument(processText(job.description));
+  allDocuments.forEach((doc) => {
+    tfidf.addDocument(doc);
   });
 
-  // Calculate scores based on cosine similarity
+  const userVector = extractTfidfVector(tfidf, 0);
+
   const jobScores = jobs.map((job, index) => {
-    const vecA = extractTfidfVector(tfidf, 0);
-    const vecB = extractTfidfVector(tfidf, index + 1);
-    const similarity = cosineSimilarity(vecA, vecB);
+    const jobVector = extractTfidfVector(tfidf, index + 1);
+    const similarity = cosineSimilarity(userVector, jobVector);
     return {
       job,
       score: similarity,
@@ -105,19 +106,44 @@ function calculateJobScores(userProfile, jobs) {
   });
 
   return jobScores;
-}
+};
 
 // Function to recommend jobs based on user profile
-function recommendJobs(user, jobs, topN = 10) {
+function recommendJobs(
+  user,
+  jobs,
+  titleThreshold = 0.8,
+  topN = 50,
+  likedJobs = [],
+  dislikedJobs = []
+) {
   // Filter jobs based on title similarity
-  const filteredJobs = filterJobsByTitle(user, jobs);
+  const filteredJobs = jobs.filter((job) => {
+    const jobTitle = job.title.toLowerCase();
+    const userTitle = user.title.toLowerCase();
+    const titleSimilarity = JaroWinklerDistance(userTitle, jobTitle, {});
+    return titleSimilarity >= titleThreshold;
+  });
 
+  // const jobScores = calculateJobScores(user, jobs);
   const jobScores = calculateJobScores(user, filteredJobs);
 
   // Adjust job scores based on user feedback and location
   jobScores.forEach((jobScore) => {
     if (compareLocation(user.location, jobScore.job.location)) {
-      jobScore.score *= 1.1; // Increase the score by 10% for jobs with matching locations
+      jobScore.score *= 1.01; // Increase the score by 1% for jobs with matching locations
+    }
+
+    if (likedJobs.some((likedJob) => likedJob.index === jobScore.job.index)) {
+      jobScore.score *= 1.2;
+    }
+
+    if (
+      dislikedJobs.some(
+        (dislikedJob) => dislikedJob.index === jobScore.job.index
+      )
+    ) {
+      jobScore.score *= 0.6;
     }
   });
 
@@ -129,9 +155,10 @@ function recommendJobs(user, jobs, topN = 10) {
 }
 
 // Example usage
-const recommendedJobsForUser1 = recommendJobs(users.user1, jobs);
-console.log('recommendedJobsForUser1: ', recommendedJobsForUser1);
-const recommendedJobsForUser2 = recommendJobs(users.user2, jobs);
-console.log('recommendedJobsForUser2: ', recommendedJobsForUser2);
 const recommendedJobsForUser3 = recommendJobs(users.user3, jobs);
-console.log('recommendedJobsForUser3: ', recommendedJobsForUser3);
+console.log(
+  'recommendedJobsForUser3: ',
+  recommendedJobsForUser3
+    .map((job) => job.jobType)
+    .filter((x) => x === 'DevOps').length
+);

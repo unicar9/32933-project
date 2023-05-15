@@ -1,11 +1,12 @@
 const fs = require('fs');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+const _ = require('lodash');
 
 const sites = ['Indeed', 'LinkedIn', 'Seek'];
 
 const test = async () => {
   try {
-    const jobsData = await fs.promises.readFile('data/jobs.json', 'utf8');
+    const jobsData = await fs.promises.readFile('../data/jobs.json', 'utf8');
     const jobs = JSON.parse(jobsData);
 
     const filtered = (site) => jobs.filter((job) => job.site === site);
@@ -18,36 +19,48 @@ const test = async () => {
     console.log('seekJobsOriginal: ', seekJobsOriginal.length);
 
     const indeedJobsData = await fs.promises.readFile(
-      'data/Indeed.json',
+      '../data/Indeed.json',
       'utf8'
     );
     const indeedJobs = JSON.parse(indeedJobsData);
     console.log('indeedJobs: ', indeedJobs.length);
 
     const linkedInJobsData = await fs.promises.readFile(
-      'data/LinkedIn.json',
+      '../data/LinkedIn.json',
       'utf8'
     );
     const linkedInJobs = JSON.parse(linkedInJobsData);
     console.log('linkedInJobs: ', linkedInJobs.length);
 
-    const seekJobsData = await fs.promises.readFile('data/Seek.json', 'utf8');
+    const seekJobsData = await fs.promises.readFile(
+      '../data/Seek.json',
+      'utf8'
+    );
     const seekJobs = JSON.parse(seekJobsData);
     console.log('seekJobs: ', seekJobs.length);
 
     const jobsWithDetails = [...indeedJobs, ...linkedInJobs, ...seekJobs];
 
-    // fs.writeFile(
-    //   'jobsWithDetails.json',
-    //   JSON.stringify(jobsWithDetails),
-    //   (err) => {
-    //     if (err) throw err;
-    //     console.log(
-    //       `${jobsWithDetails.length} Jobs data has been written to jobsWithDetails.json`
-    //     );
-    //     return;
-    //   }
-    // );
+    const uniqJobs = _.uniqBy(jobsWithDetails, 'link');
+
+    const jobsWithDetailsAndIndex = uniqJobs.map((job, index) => {
+      return {
+        ...job,
+        index,
+      };
+    });
+
+    fs.writeFile(
+      'jobsWithDetailsAndIndex.json',
+      JSON.stringify(jobsWithDetailsAndIndex),
+      (err) => {
+        if (err) throw err;
+        console.log(
+          `${jobsWithDetailsAndIndex.length} Jobs data has been written to jobsWithDetailsAndIndex.json`
+        );
+        return;
+      }
+    );
 
     const csvWriter = createCsvWriter({
       path: 'jobsWithDetails.csv',
